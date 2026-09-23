@@ -1,16 +1,17 @@
 package controllers
 
 import (
-	"compress/gzip"
 	"bytes"
+	"compress/gzip"
 	"context"
+	_ "embed"
 	"errors"
 	"fmt"
+	"html/template"
 	"net"
 	"net/http"
 	"strings"
 	"time"
-	"html/template"
 
 	"github.com/NYTimes/gziphandler"
 	"github.com/gophish/gophish/config"
@@ -90,20 +91,22 @@ func customError(w http.ResponseWriter, error string, code int) {
 	fmt.Fprintln(w, error)
 }
 
+//go:embed 404.html
+var notFoundPage string
+
+// tmpl404 is parsed once at startup from the embedded page. Parsing per
+// request meant a missing or unreadable file could take the whole server
+// down on the first 404.
+var tmpl404 = template.Must(template.New("404").Parse(notFoundPage))
+
 func customNotFound(w http.ResponseWriter, r *http.Request) {
-	tmpl404, err := template.ParseFiles("templates/404.html")
-	if err != nil {
-		log.Fatal(err)
-	}
 	var b bytes.Buffer
-	err = tmpl404.Execute(&b, "")
-	if err != nil {
-		customNotFound(w, r)
+	if err := tmpl404.Execute(&b, ""); err != nil {
+		customError(w, "404 Not Found", http.StatusNotFound)
 		return
 	}
 	customError(w, b.String(), http.StatusNotFound)
 }
-
 
 // Start launches the phishing server, listening on the configured address.
 func (ps *PhishingServer) Start() {
